@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <circle cx="64" cy="52" r="34" stroke="#fff" stroke-width="3"/>
+  <g stroke="#fff" stroke-width="4" stroke-linecap="round">
+    <ellipse cx="64" cy="52" rx="14" ry="21" transform="rotate(-30 64 52)"/>
+    <path d="M56 36c10 6 0 20 16 32" />
+  </g>
+  <text x="64" y="112" text-anchor="middle" fill="#fff" font-family="'Space Grotesk', Arial, sans-serif" font-size="20" font-weight="600" letter-spacing="5">ЗЕРНО</text>
+</svg>

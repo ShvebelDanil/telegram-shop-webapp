@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Зерно — кофейня</title>
+    <link rel="icon" href="/img/logo.svg" type="image/svg+xml" />
+    <!-- Официальный SDK Telegram WebApp: гарантирует, что window.Telegram.WebApp
+         и initData/initDataUnsafe инициализированы до старта React-приложения -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+      // Читаем ?uid=<telegram_id>&sig=<hmac> из URL ссылки-кнопки «Каталог».
+      // Подпись ставит бот (handlers/keyboards.py), проверяет FastAPI (/api/order).
+      // window.__webappUid доступен до старта React-бандла, чтобы ID
+      // гарантированно попал в первый рендер и ушёл с заказом.
+      (function () {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          var uid = parseInt(params.get('uid'), 10);
+          var sig = params.get('sig');
+          window.__webappUid = Number.isFinite(uid) ? uid : null;
+          window.__webappSig = sig;
+        } catch (e) {
+          window.__webappUid = null;
+          window.__webappSig = null;
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
