@@ -530,8 +530,8 @@ class ConfirmCardPaymentRequest(BaseModel):
 
 @app.post("/api/confirm-card-payment")
 async def confirm_card_payment(payload: ConfirmCardPaymentRequest):
-    """Юзер сам подтвердил оплату по статичной ссылке СБП (кнопка «Я оплатил» в вебаппе) —
-    отправляем заказ в группу менеджеров с кнопками «Заказ отдан»/«Отменить».
+    """Юзер перешёл к оплате по статичной ссылке СБП (кнопка перевода в вебаппе) — отправляем
+    заказ в группу менеджеров с кнопками «Заказ отдан»/«Отменить»; поступление менеджер сверяет сам.
     Идемпотентно — повторный вызов на уже отправленный заказ ничего не шлёт повторно."""
     verified_id = _verify_user_id(payload.init_data, payload.webapp_uid, payload.webapp_sig)
     if verified_id is None or verified_id != payload.user_id:
@@ -573,7 +573,7 @@ async def confirm_card_payment(payload: ConfirmCardPaymentRequest):
         )
     except Exception as e:
         # Не отправилось менеджеру — откатываем резерв склада. sent_to_manager
-        # остаётся False, так что юзер может просто нажать «Я оплатил» ещё раз.
+        # остаётся False, так что повторный клик по кнопке перевода отправит заказ ещё раз.
         print(f"Ошибка отправки заказа менеджеру: {e}")
         await restock_items(pending["cart_items"])
         raise HTTPException(status_code=502, detail="Не удалось отправить заказ менеджеру, попробуйте ещё раз через минуту")

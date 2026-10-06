@@ -328,7 +328,7 @@ def create_pending_card_order(
 ) -> None:
     """Оформление заказа картой из /api/order. Склад НЕ резервирует и номер НЕ
     присваивает — это происходит в /api/confirm-card-payment (server_api.py), когда юзер
-    нажмёт «Я оплатил» в вебаппе. До этого передумавший клиент ничего не блокирует."""
+    перейдёт к переводу в вебаппе. До этого передумавший клиент ничего не блокирует."""
     order_key = new_order_key()
     full_price = total_price + delivery_cost + SERVICE_FEE
 

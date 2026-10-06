@@ -8,9 +8,7 @@ import {
   Truck,
   Wrench,
   Loader2,
-  ShieldAlert,
   CheckCircle2,
-  X,
   ChevronLeft
 } from 'lucide-react';
 import { buildIdentityParams, getPluralRussian, getUserId, identityBody, triggerHaptic } from '../tg';
@@ -35,17 +33,16 @@ interface PendingOrder {
 /**
  * Экран оплаты картой: состав заказа + сумма к переводу и статичная ссылка СБП
  * (PAY_LINK в .env) — сумму в неё не подставить, клиент переводит сам ровно
- * столько, сколько указано на экране. После перехода по ссылке разблокируется
- * «Я оплатил» — одноразовая кнопка, которая шлёт заказ в группу менеджеров.
+ * столько, сколько указано на экране. Кнопка перехода к оплате заодно отправляет
+ * заказ менеджерам (они сверяют поступление перед выдачей); ссылку можно открыть повторно.
  */
 export default function PaymentGate({ onBack }: { onBack?: () => void } = {}) {
   const [order, setOrder] = useState<PendingOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [hasOpenedPayLink, setHasOpenedPayLink] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [confirmError, setConfirmError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const fetchOrder = async () => {
     setLoading(true);
@@ -83,27 +80,12 @@ export default function PaymentGate({ onBack }: { onBack?: () => void } = {}) {
     }
   }, []);
 
-  const handleOpenPayLink = () => {
-    if (!order?.pay_url) return;
-    triggerHaptic('medium');
-    // openLink открывает страницу оплаты во внешнем браузере — так требует Telegram
-    if (window.Telegram?.WebApp?.openLink) {
-      window.Telegram.WebApp.openLink(order.pay_url);
-    } else {
-      window.open(order.pay_url, '_blank');
-    }
-    setHasOpenedPayLink(true);
-  };
-
-  const handleConfirmPaid = async () => {
-    if (!hasOpenedPayLink || confirming || done) return;
+  const sendToManager = async () => {
     const userId = getUserId();
     if (!userId) return;
 
-    setConfirming(true);
-    setConfirmError(null);
-    triggerHaptic('heavy');
-
+    setSending(true);
+    setSendError(null);
     try {
       const res = await fetch(`/api/confirm-card-payment`, {
         method: 'POST',
@@ -115,21 +97,28 @@ export default function PaymentGate({ onBack }: { onBack?: () => void } = {}) {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.detail || 'Не получилось отправить подтверждение, попробуйте ещё раз');
+        throw new Error(data?.detail || 'Не получилось передать заказ менеджеру, нажмите кнопку ещё раз');
       }
-      setDone(true);
+      setSent(true);
     } catch (err: any) {
       console.error(err);
-      setConfirmError(err.message || 'Не получилось отправить подтверждение');
-      setConfirming(false);
+      setSendError(err.message || 'Не получилось передать заказ менеджеру');
+    } finally {
+      setSending(false);
     }
   };
 
-  const handleClose = () => {
-    triggerHaptic('light');
-    if (window.Telegram?.WebApp?.close) {
-      window.Telegram.WebApp.close();
+  const handleOpenPayLink = () => {
+    if (!order?.pay_url) return;
+    triggerHaptic('medium');
+    // openLink — синхронно в обработчике клика (Telegram открывает внешние ссылки только по жесту юзера)
+    if (window.Telegram?.WebApp?.openLink) {
+      window.Telegram.WebApp.openLink(order.pay_url);
+    } else {
+      window.open(order.pay_url, '_blank');
     }
+    // Сервер идемпотентен, но повторный клик после успешной отправки просто снова открывает ссылку.
+    if (!sent && !sending) sendToManager();
   };
 
   if (loading) {
@@ -179,32 +168,6 @@ export default function PaymentGate({ onBack }: { onBack?: () => void } = {}) {
               </button>
             )}
           </div>
-        </div>
-      </motion.div>
-    );
-  }
-
-  if (done) {
-    return (
-      <motion.div
-        key="payment-done"
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col items-center justify-center min-h-[60vh] px-2"
-      >
-        <div className="w-full max-w-sm p-7 rounded-2xl border border-emerald-500/20 bg-emerald-950/30 backdrop-blur-lg text-center">
-          <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-4" />
-          <p className="font-display font-semibold text-sm uppercase tracking-widest text-emerald-200">Спасибо за заказ!</p>
-          <p className="mt-2 text-xs font-sans text-emerald-100/80 leading-relaxed">
-            Вскоре с вами свяжется менеджер для уточнения деталей.
-          </p>
-          <button
-            onClick={handleClose}
-            className="mt-5 inline-flex items-center space-x-1.5 text-xs bg-white/10 text-white font-mono px-4 py-2 rounded-lg border border-white/20 hover:bg-white/20 transition-all cursor-pointer"
-          >
-            <X className="w-3 h-3" />
-            <span>Закрыть</span>
-          </button>
         </div>
       </motion.div>
     );
@@ -308,52 +271,36 @@ export default function PaymentGate({ onBack }: { onBack?: () => void } = {}) {
           </div>
         </div>
 
-        {/* Предупреждение — ссылка не привязана к сумме, юзер переводит сам */}
-        <div className="p-4 rounded-2xl border border-amber-500/25 bg-amber-950/20 flex items-start gap-2.5">
-          <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-          <p className="text-[11px] font-sans text-amber-100/90 leading-relaxed">
-            При переходе по ссылке переведите <b>ровно {order.full_price} ₽</b>. Кнопку «Я оплатил»
-            можно нажать только один раз — нажимайте её только после того, как перевод
-            действительно отправлен. При выдаче заказа менеджер попросит показать перевод.
-          </p>
-        </div>
-
-        {/* Pay link button */}
+        {/* Ссылка СБП не привязана к сумме: открывает перевод и передаёт заказ менеджеру */}
         <button
           onClick={handleOpenPayLink}
           className="w-full py-4 rounded-xl bg-white text-black font-display font-medium text-xs tracking-[0.2em] uppercase shadow-[0_6px_25px_rgba(255,255,255,0.15)] hover:bg-gray-100 transition-all text-center flex items-center justify-center space-x-2 active:scale-[0.98] cursor-pointer"
         >
-          <CreditCard className="w-4 h-4" />
+          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
           <span>Перейти к переводу {order.full_price} ₽</span>
         </button>
 
-        {/* «Я оплатил» — заблокирована, пока не открыта ссылка перевода */}
-        <button
-          onClick={handleConfirmPaid}
-          disabled={!hasOpenedPayLink || confirming}
-          className={`w-full py-4 rounded-xl font-display font-medium text-xs tracking-[0.2em] uppercase transition-all text-center flex items-center justify-center space-x-2 ${
-            hasOpenedPayLink && !confirming
-              ? 'bg-emerald-500 text-black hover:bg-emerald-400 active:scale-[0.98] cursor-pointer'
-              : 'bg-white/10 text-white/40 cursor-not-allowed'
-          }`}
-        >
-          {confirming ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <CheckCircle2 className="w-4 h-4" />
-          )}
-          <span>Я оплатил</span>
-        </button>
-
         <AnimatePresence>
-          {confirmError && (
+          {sent && (
             <motion.p
+              key="sent"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex items-center justify-center gap-1.5 text-center text-[11px] font-sans text-emerald-300/90"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <span>Заказ передан менеджеру — номер придёт в чат с ботом</span>
+            </motion.p>
+          )}
+          {sendError && (
+            <motion.p
+              key="error"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="text-center text-[11px] font-sans text-red-300/90"
             >
-              {confirmError}
+              {sendError}
             </motion.p>
           )}
         </AnimatePresence>

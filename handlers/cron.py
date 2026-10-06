@@ -35,7 +35,7 @@ async def _expire_pending_order(bot: Bot, order_key: str, order_data: dict) -> N
     except Exception:
         pass
 
-    # Менеджеры видели только заказы, отправленные им в чат (наличные / «Я оплатил»).
+    # Менеджеры видели только заказы, отправленные им в чат (наличные / переход к оплате картой).
     # Снимаем кнопки, иначе «Заказ отдан» на 25-й час выдал бы товар мимо склада и отчёта.
     manager_message_id = order_data.get("manager_message_id")
     if manager_message_id:
